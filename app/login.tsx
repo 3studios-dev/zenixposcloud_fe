@@ -14,14 +14,12 @@ import { Eye, EyeOff, LogIn, User, Lock, Sun, Moon } from "lucide-react-native";
 import { login } from "../src/services/auth";
 import ZenixLogo from "@/assets/zenixpos.svg";
 import ThreeStudiosLogo from "@/assets/3studios.svg";
-import {THEME_KEY, useColors } from "@/src/hooks/useColors";
+import { THEME_KEY, useColors } from "@/src/hooks/useColors";
+import { TOKEN_KEY } from "@/src/services/api";
 
 const REMEMBER_KEY = "rt_remember_username";
-const TOKEN_KEY = "auth_token";
-
 
 const BRAND_NAME = "ZenixPos";
-
 
 type ThemeMode = "light" | "dark";
 
@@ -41,6 +39,20 @@ export default function LoginScreen() {
   useEffect(() => {
     navigation.setOptions?.({ headerShown: false });
   }, [navigation]);
+
+  // ✅ FIX: se esiste già un token, non rimanere su /login (evita il “blocco” dopo redirect/refresh)
+  useEffect(() => {
+    (async () => {
+      try {
+        const t = await AsyncStorage.getItem(TOKEN_KEY);
+        if (t && t.trim().length > 0) {
+          router.replace("/");
+        }
+      } catch {
+        // non bloccare la UI per problemi storage
+      }
+    })();
+  }, [router]);
 
   useEffect(() => {
     (async () => {
@@ -74,7 +86,8 @@ export default function LoginScreen() {
         err?.message ||
         "";
 
-    if (err?.code === "ECONNABORTED") return "Timeout della richiesta. Controlla la connessione.";
+    if (err?.code === "ECONNABORTED")
+      return "Timeout della richiesta. Controlla la connessione.";
     if (apiMsg.toLowerCase().includes("network") || err?.message === "Network Error") {
       return "Impossibile contattare il server.";
     }
@@ -88,6 +101,9 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
+    // ✅ FIX: evita doppio submit / double tap / enter+click
+    if (loading) return;
+
     setErrorMsg(null);
     if (!canSubmit) return;
 
@@ -177,7 +193,9 @@ export default function LoginScreen() {
 
           {/* Card login */}
           <View className={`w-full max-w-md ${colors.card} rounded-2xl p-6 shadow-lg`}>
-            <Text className={`text-2xl font-bold ${colors.textPrimary} mb-6 text-center`}>Cloud Manager</Text>
+            <Text className={`text-2xl font-bold ${colors.textPrimary} mb-6 text-center`}>
+              Cloud Manager
+            </Text>
 
             {errorMsg ? (
                 <View className={`${colors.dangerBox} border rounded-xl px-4 py-3 mb-4`}>
@@ -224,7 +242,11 @@ export default function LoginScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={showPassword ? "Nascondi password" : "Mostra password"}
                 >
-                  {showPassword ? <EyeOff size={20} color={colors.icon} /> : <Eye size={20} color={colors.icon} />}
+                  {showPassword ? (
+                      <EyeOff size={20} color={colors.icon} />
+                  ) : (
+                      <Eye size={20} color={colors.icon} />
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -244,19 +266,16 @@ export default function LoginScreen() {
                       height: 20,
                       borderRadius: 6,
                       marginRight: 8,
-                      // bordo: blu se selezionato, altrimenti il tuo colore tema
                       borderWidth: 1,
                       borderColor: rememberMe
                           ? "#38B6FF"
                           : (theme === "light" ? "#6B7280" : "#4B5563"),
-                      // sfondo: blu se selezionato, trasparente se no
                       backgroundColor: rememberMe ? "#38B6FF" : "transparent",
                     }}
                 />
                 <Text className={`${colors.textSecondary}`}>Ricordami</Text>
               </TouchableOpacity>
             </View>
-
 
             {/* Login */}
             <TouchableOpacity
@@ -272,7 +291,9 @@ export default function LoginScreen() {
                 ) : (
                     <>
                       <LogIn size={20} color="white" />
-                      <Text className={`font-bold text-lg ml-2 ${colors.buttonText}`}>Sign In</Text>
+                      <Text className={`font-bold text-lg ml-2 ${colors.buttonText}`}>
+                        Sign In
+                      </Text>
                     </>
                 )}
               </View>
@@ -281,18 +302,19 @@ export default function LoginScreen() {
 
           {/* Footer legale conforme */}
           <View style={{ alignItems: "center", marginTop: 30, marginBottom: 20 }}>
-            {/* COPYRIGHT + P.IVA */}
             <Text style={{ color: C.textSecondary, fontSize: 12, textAlign: "center" }}>
               © 2025 ZenixPos - P.IVA 01445770777
             </Text>
 
-            {/* POWERED BY */}
             <Text style={{ color: C.textSecondary, fontSize: 12, marginTop: 6 }}>
               Powered by
             </Text>
 
-            {/* Logo 3Studios sotto */}
-            <ThreeStudiosLogo width={80} height={30} style={{ marginTop: 4, color: C.textPrimary,}} />
+            <ThreeStudiosLogo
+                width={80}
+                height={30}
+                style={{ marginTop: 4, color: C.textPrimary }}
+            />
           </View>
         </View>
       </ScrollView>

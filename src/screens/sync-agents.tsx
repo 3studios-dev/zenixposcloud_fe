@@ -27,6 +27,7 @@ import {
     UserPlus,
     Save,
     Settings,
+    CloudUpload,
 } from "lucide-react-native";
 
 import { THEME_KEY, useColors } from "@/src/hooks/useColors";
@@ -597,20 +598,22 @@ export default function SyncAgentsSettingsScreen() {
                     >
                         <Settings size={18} color={C.textSecondary} />
                     </TouchableOpacity>
-
+                    {/* link rapido alla pagina updates */}
                     <TouchableOpacity
-                        onPress={toggleTheme}
+                        onPress={() => router.push("/settings/updates")}
                         style={{
                             padding: 6,
                             borderRadius: 999,
+                            backgroundColor: C.rowBg,
+                            borderWidth: 1,
+                            borderColor: C.cardBorder,
                         }}
                     >
-                        {themeMode === "dark" ? (
-                            <Sun size={20} color={C.icon} />
-                        ) : (
-                            <Moon size={20} color={C.icon} />
-                        )}
+                        <CloudUpload size={18} color={C.textSecondary} />
                     </TouchableOpacity>
+
+
+
 
                     <TouchableOpacity
                         onPress={handleLogout}
@@ -672,6 +675,8 @@ export default function SyncAgentsSettingsScreen() {
                             gap: 10,
                         }}
                     >
+
+
                         <View
                             style={{
                                 width: 34,
@@ -706,6 +711,52 @@ export default function SyncAgentsSettingsScreen() {
                             </Text>
                         </View>
                     </View>
+
+                    {/* Quick entry: Cloud Updates */}
+                    <TouchableOpacity
+                        onPress={() => router.push("/settings/updates")}
+                        style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: isSmallScreen ? 10 : 12,
+                            borderRadius: 12,
+                            backgroundColor: C.cardBg,
+                            borderWidth: 1,
+                            borderColor: C.cardBorder,
+                            marginBottom: 16,
+                        }}
+                    >
+                        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                            <View
+                                style={{
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 17,
+                                    backgroundColor: C.rowBg,
+                                    borderWidth: 1,
+                                    borderColor: C.cardBorder,
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    marginRight: 10,
+                                }}
+                            >
+                                <CloudUpload size={18} color={C.accent} />
+                            </View>
+
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: C.textPrimary, fontWeight: "800", fontSize: 14 }}>
+                                    Aggiornamenti Cloud
+                                </Text>
+                                <Text style={{ color: C.textSecondary, fontSize: 12, marginTop: 2 }}>
+                                    Carica ZIP FE/BE/Launcher, verifica aggiornamenti e genera URL di download.
+                                </Text>
+                            </View>
+                        </View>
+
+                        <ChevronRight size={18} color={C.textSecondary} />
+                    </TouchableOpacity>
+
 
                     {/* Error */}
                     {error && (

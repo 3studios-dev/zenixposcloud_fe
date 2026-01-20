@@ -3,41 +3,17 @@ import api from "./api";
 
 export interface AppUser {
     id: string;
-    name?: string;
-    email?: string;
-    username?: string;
-    // aggiungi qui i campi reali che ti torna /app/users/all
-}
-
-export async function fetchAllUsers(): Promise<AppUser[]> {
-    const res = await api.get<AppUser[]>("/api/v1/app/users/all");
-    return res.data;
-}
-
-export interface SyncAgentPayload {
-    agentId: string;
-    userId: string;
-}
-
-export interface SyncAgent {
-    id?: string;
-    agentId: string;
-    userId: string;
-    apiKey?: string;
-    creationDate?: string;
-    updateDate?: string;
-    // aggiungi qui quello che realmente torna il backend
-}
-
-
-export interface AppUser {
-    id: string;
     username?: string;
     name?: string;
     firstName?: string;
     lastName?: string;
     email?: string;
-    // ...altri campi se li hai
+    role?: string;
+}
+
+export async function fetchAllUsers(): Promise<AppUser[]> {
+    const res = await api.get<AppUser[]>("/api/v1/app/users/all");
+    return res.data;
 }
 
 export interface RegisterUserPayload {
@@ -55,44 +31,45 @@ export interface RegisterUserPayload {
     country?: string;
 }
 
-export async function registerUser(
-    payload: RegisterUserPayload
-): Promise<AppUser> {
+export async function registerUser(payload: RegisterUserPayload): Promise<AppUser> {
     const res = await api.post<AppUser>("/api/v1/auth/register", payload);
     return res.data;
 }
 
-export async function createSyncAgent(
-    payload: SyncAgentPayload
-): Promise<SyncAgent> {
-    const res = await api.post<SyncAgent>(
-        "/api/v1/admin/sync-agents",
-        payload
-    );
-    return res.data;
+export interface SyncAgentPayload {
+    agentId: string;
+    userId: string;
 }
 
-
-
 export interface SyncAgent {
+    // campi “base” usati in sync-agents.tsx
+    id?: string;
     agentId: string;
     apiKey?: string | null;
-    enabled: boolean;
-    tenantId: string;
-    user: {
+
+    // campi possibili da info endpoint
+    enabled?: boolean;
+    tenantId?: string;
+    userId?: string;
+
+    user?: {
         id: string;
         username: string;
         role: string;
     };
+
+    creationDate?: string;
+    updateDate?: string;
 }
 
-export async function fetchSyncAgentInfoByUserId(
-    userId: string
-): Promise<SyncAgent | null> {
+export async function createSyncAgent(payload: SyncAgentPayload): Promise<SyncAgent> {
+    const res = await api.post<SyncAgent>("/api/v1/admin/sync-agents", payload);
+    return res.data;
+}
+
+export async function fetchSyncAgentInfoByUserId(userId: string): Promise<SyncAgent | null> {
     try {
-        const res = await api.get<SyncAgent>(
-            `/api/v1/admin/sync-agents/get-info/${userId}`
-        );
+        const res = await api.get<SyncAgent>(`/api/v1/admin/sync-agents/get-info/${userId}`);
         return res.data;
     } catch (e: any) {
         const status = e?.response?.status;

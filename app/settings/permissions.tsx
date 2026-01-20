@@ -429,19 +429,7 @@ export default function PermissionsSettingsScreen() {
                         />
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        onPress={toggleTheme}
-                        style={{
-                            padding: 6,
-                            borderRadius: 999,
-                        }}
-                    >
-                        {themeMode === "dark" ? (
-                            <Sun size={20} color={C.icon} />
-                        ) : (
-                            <Moon size={20} color={C.icon} />
-                        )}
-                    </TouchableOpacity>
+
 
                     <TouchableOpacity
                         onPress={handleLogout}

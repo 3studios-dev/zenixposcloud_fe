@@ -6,17 +6,28 @@ const TOKEN_KEY = "auth_token";
 
 let MEM_TOKEN: string | null = null;
 
+// anti-loop in caso di 401 ripetuti
+let IS_REDIRECTING_TO_LOGIN = false;
+
 export function getAuthToken() {
     return MEM_TOKEN;
 }
 
 export async function setAuthToken(token: string) {
     MEM_TOKEN = token;
+
+    // imposta subito anche sul default axios (più deterministico)
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+
     await AsyncStorage.setItem(TOKEN_KEY, token);
 }
 
 export async function clearAuthToken() {
     MEM_TOKEN = null;
+
+    // rimuove anche dal default axios
+    delete api.defaults.headers.common.Authorization;
+
     await AsyncStorage.removeItem(TOKEN_KEY);
 }
 
@@ -24,6 +35,10 @@ export async function bootstrapAuthToken() {
     if (!MEM_TOKEN) {
         const t = await AsyncStorage.getItem(TOKEN_KEY);
         MEM_TOKEN = t || null;
+
+        if (MEM_TOKEN) {
+            api.defaults.headers.common.Authorization = `Bearer ${MEM_TOKEN}`;
+        }
     }
 }
 
@@ -66,8 +81,15 @@ const api = axios.create({
 
 async function ensureToken(): Promise<string | null> {
     if (MEM_TOKEN) return MEM_TOKEN;
+
     const t = await AsyncStorage.getItem(TOKEN_KEY);
     MEM_TOKEN = t || null;
+
+    // riallinea anche il default axios se trovato
+    if (MEM_TOKEN) {
+        api.defaults.headers.common.Authorization = `Bearer ${MEM_TOKEN}`;
+    }
+
     return MEM_TOKEN;
 }
 
@@ -77,8 +99,7 @@ api.interceptors.request.use(
         const token = await ensureToken();
 
         const isFormData =
-            typeof FormData !== "undefined" &&
-            config.data instanceof FormData;
+            typeof FormData !== "undefined" && config.data instanceof FormData;
 
         // Normalizziamo gli header SENZA rompere le GET
         const method = (config.method || "get").toLowerCase();
@@ -126,11 +147,29 @@ api.interceptors.response.use(
         const status = error?.response?.status;
 
         if (status === 401) {
+            // evita loop se arrivano più 401 in cascata
+            if (IS_REDIRECTING_TO_LOGIN) {
+                return Promise.reject(error);
+            }
+
             console.warn("🔒 Token scaduto o non valido, eseguo logout...");
-            await clearAuthToken();
-            const currentPath = (router as any)?.pathname || "";
-            if (!currentPath.includes("/login")) {
-                router.replace("/login");
+            IS_REDIRECTING_TO_LOGIN = true;
+
+            try {
+                await clearAuthToken();
+
+                const isWeb = typeof window !== "undefined";
+                const path = isWeb ? window.location.pathname : "";
+
+                // se siamo già su /login (web), non fare replace
+                if (!isWeb || !path.includes("/login")) {
+                    router.replace("/login");
+                }
+            } finally {
+                // reset dopo un breve tick: evita rimbalzi durante la transizione
+                setTimeout(() => {
+                    IS_REDIRECTING_TO_LOGIN = false;
+                }, 300);
             }
         }
 
