@@ -113,8 +113,17 @@ api.interceptors.request.use(
     async (config) => {
         const token = await ensureToken();
 
+        const data = config.data as any;
+
         const isFormData =
-            typeof FormData !== "undefined" && config.data instanceof FormData;
+            !!data &&
+            (
+                (typeof FormData !== "undefined" && data instanceof FormData) ||
+                // React Native FormData spesso espone _parts (o getParts)
+                Array.isArray(data?._parts) ||
+                typeof data?.getParts === "function"
+            );
+
 
         const method = (config.method || "get").toLowerCase();
 

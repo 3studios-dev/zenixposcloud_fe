@@ -4,7 +4,6 @@ import api, { extractApiErrorMessage } from "@/src/services/api";
 export type UpdateModule = "FE" | "BE" | "LAUNCHER";
 
 function toSafeFilename(name: string): string {
-    // evita spazi “strani” e path accidentali
     const base = name.split("/").pop()?.split("\\").pop() ?? name;
     return base.replace(/\s+/g, " ").trim();
 }
@@ -15,32 +14,28 @@ export async function uploadUpdateZip(params: {
     fileUri: string;
     originalFileName: string;
 }): Promise<any> {
-    const fileName = toSafeFilename(params.originalFileName);
+    const original = toSafeFilename(params.originalFileName);
+    const baseName = original.replace(/\.zip$/i, "");
+
+    const zipName = original.toLowerCase().endsWith(".zip")
+        ? original
+        : `${baseName}.zip`;
 
     const form = new FormData();
     form.append("module", params.module);
     form.append("version", params.version.trim());
-    form.append("fileName", fileName);
+    form.append("fileName", baseName);
     form.append("contentType", "application/zip");
-
-    // React Native / Expo: serve { uri, name, type }
     form.append(
         "file",
-        {
-            uri: params.fileUri,
-            name: fileName,
-            type: "application/zip",
-        } as any
+        { uri: params.fileUri, name: zipName, type: "application/zip" } as any
     );
 
     try {
-        const res = await api.post("/api/v1/admin/updates", form, {
-            headers: { "Content-Type": "multipart/form-data" },
-        });
+        // NON impostare Content-Type manualmente
+        const res = await api.post("/api/v1/admin/updates", form);
         return res.data;
     } catch (e: any) {
-        throw new Error(
-            extractApiErrorMessage?.(e) || e?.message || "Upload fallito"
-        );
+        throw new Error(extractApiErrorMessage?.(e) || e?.message || "Upload fallito");
     }
 }
