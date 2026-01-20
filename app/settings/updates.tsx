@@ -65,7 +65,13 @@ export default function UpdatesCloudScreen() {
     // ------- UPLOAD STATE -------
     const [uploadModule, setUploadModule] = useState<UpdateModule>("FE");
     const [uploadVersion, setUploadVersion] = useState("");
+
+    // Native
     const [pickedUri, setPickedUri] = useState<string | null>(null);
+
+    // Web (File reale)
+    const [pickedFile, setPickedFile] = useState<File | null>(null);
+
     const [pickedName, setPickedName] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [lastUploadResult, setLastUploadResult] = useState<any>(null);
@@ -135,7 +141,7 @@ export default function UpdatesCloudScreen() {
             if (res.canceled) return;
 
             const asset = res.assets?.[0];
-            if (!asset?.uri) {
+            if (!asset) {
                 Alert.alert("Errore", "File non valido.");
                 return;
             }
@@ -146,16 +152,39 @@ export default function UpdatesCloudScreen() {
                 return;
             }
 
-            setPickedUri(asset.uri);
             setPickedName(name);
+
+            if (Platform.OS === "web") {
+                /**
+                 * SU WEB serve un File reale:
+                 * se carichi usando { uri, name, type } il backend riceve un binario alterato e lo zip risulta corrotto.
+                 */
+                const f = (asset as any).file as File | undefined;
+                if (!f) {
+                    Alert.alert("Errore", "Il browser non ha fornito il File reale.");
+                    return;
+                }
+                setPickedFile(f);
+                setPickedUri(null);
+            } else {
+                if (!asset.uri) {
+                    Alert.alert("Errore", "URI file non valido.");
+                    return;
+                }
+                setPickedUri(asset.uri);
+                setPickedFile(null);
+            }
         } catch (e: any) {
             setError(e?.message || "Errore durante la selezione file.");
         }
     };
 
     const canUpload = useMemo(() => {
-        return !!uploadVersion.trim() && !!pickedUri && !!pickedName;
-    }, [uploadVersion, pickedUri, pickedName]);
+        if (!uploadVersion.trim() || !pickedName) return false;
+
+        // Web: serve pickedFile; Native: serve pickedUri
+        return Platform.OS === "web" ? !!pickedFile : !!pickedUri;
+    }, [uploadVersion, pickedName, pickedFile, pickedUri]);
 
     /* -------- ACTION: UPLOAD -------- */
     const onUpload = async () => {
@@ -172,8 +201,9 @@ export default function UpdatesCloudScreen() {
             const data = await uploadUpdateZip({
                 module: uploadModule,
                 version: uploadVersion.trim(),
-                fileUri: pickedUri!,
                 originalFileName: pickedName!,
+                file: Platform.OS === "web" ? pickedFile ?? undefined : undefined,
+                fileUri: Platform.OS !== "web" ? pickedUri ?? undefined : undefined,
             });
 
             setLastUploadResult(data);
@@ -274,10 +304,7 @@ export default function UpdatesCloudScreen() {
                             borderColor: C.cardBorder,
                         }}
                     >
-                        <RefreshCw
-                            size={18}
-                            color={refreshing ? C.accent : C.textSecondary}
-                        />
+                        <RefreshCw size={18} color={refreshing ? C.accent : C.textSecondary} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -455,6 +482,7 @@ export default function UpdatesCloudScreen() {
                                 <TouchableOpacity
                                     onPress={() => {
                                         setPickedUri(null);
+                                        setPickedFile(null);
                                         setPickedName(null);
                                     }}
                                     style={{
@@ -468,9 +496,7 @@ export default function UpdatesCloudScreen() {
                                         borderColor: C.cardBorder,
                                     }}
                                 >
-                                    <Text style={{ color: C.textSecondary, fontWeight: "900" }}>
-                                        ×
-                                    </Text>
+                                    <Text style={{ color: C.textSecondary, fontWeight: "900" }}>×</Text>
                                 </TouchableOpacity>
                             </View>
 
@@ -484,9 +510,7 @@ export default function UpdatesCloudScreen() {
                                     borderColor: C.cardBorder,
                                 }}
                             >
-                                <Text style={{ color: C.textSecondary, fontSize: 11 }}>
-                                    FileName (auto):
-                                </Text>
+                                <Text style={{ color: C.textSecondary, fontSize: 11 }}>FileName (auto):</Text>
                                 <Text
                                     style={{
                                         color: C.textPrimary,
@@ -560,9 +584,7 @@ export default function UpdatesCloudScreen() {
                                 marginTop: isSmallScreen ? 12 : 0,
                             }}
                         >
-                            <Text style={{ color: C.textPrimary, fontWeight: "800" }}>
-                                Risultato upload
-                            </Text>
+                            <Text style={{ color: C.textPrimary, fontWeight: "800" }}>Risultato upload</Text>
                             <Text style={{ color: C.textSecondary, fontSize: 11, marginTop: 4 }}>
                                 Ultima risposta del server dopo la POST di upload.
                             </Text>
@@ -596,12 +618,8 @@ function SectionTitle({
 }) {
     return (
         <View style={{ marginBottom: 10 }}>
-            <Text style={{ color: C.textPrimary, fontSize: 13, fontWeight: "800" }}>
-                {title}
-            </Text>
-            <Text style={{ color: C.textSecondary, fontSize: 11, marginTop: 2 }}>
-                {subtitle}
-            </Text>
+            <Text style={{ color: C.textPrimary, fontSize: 13, fontWeight: "800" }}>{title}</Text>
+            <Text style={{ color: C.textSecondary, fontSize: 11, marginTop: 2 }}>{subtitle}</Text>
         </View>
     );
 }
@@ -744,14 +762,10 @@ function ResultCard({
                 borderColor: C.cardBorder,
             }}
         >
-            <Text style={{ color: C.textPrimary, fontSize: 12, fontWeight: "800" }}>
-                {title}
-            </Text>
+            <Text style={{ color: C.textPrimary, fontSize: 12, fontWeight: "800" }}>{title}</Text>
 
             {!hasData ? (
-                <Text style={{ color: C.textSecondary, fontSize: 11, marginTop: 6 }}>
-                    {emptyText}
-                </Text>
+                <Text style={{ color: C.textSecondary, fontSize: 11, marginTop: 6 }}>{emptyText}</Text>
             ) : (
                 <Text
                     selectable
