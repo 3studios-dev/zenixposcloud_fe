@@ -15,7 +15,9 @@ import { login } from "../src/services/auth";
 import ZenixLogo from "@/assets/zenixpos.svg";
 import ThreeStudiosLogo from "@/assets/3studios.svg";
 import { THEME_KEY, useColors } from "@/src/hooks/useColors";
-import { TOKEN_KEY } from "@/src/services/api";
+
+import { TOKEN_KEY, clearAuthToken } from "@/src/services/api";
+import { fetchAllUsers } from "@/src/services/users";
 
 const REMEMBER_KEY = "rt_remember_username";
 
@@ -40,18 +42,41 @@ export default function LoginScreen() {
     navigation.setOptions?.({ headerShown: false });
   }, [navigation]);
 
-  // ✅ FIX: se esiste già un token, non rimanere su /login (evita il “blocco” dopo redirect/refresh)
+  // ✅ BOOTSTRAP: se ho un token salvato, lo verifico davvero.
+  // - Se valido -> vado in home
+  // - Se non valido -> lo cancello e resto qui (così posso fare login subito)
   useEffect(() => {
+    let alive = true;
+
     (async () => {
       try {
-        const t = await AsyncStorage.getItem(TOKEN_KEY);
-        if (t && t.trim().length > 0) {
-          router.replace("/");
-        }
-      } catch {
-        // non bloccare la UI per problemi storage
+        const token = await AsyncStorage.getItem(TOKEN_KEY);
+        if (!token || token.trim().length === 0) return;
+
+        // per evitare click/enter durante verifica
+        setLoading(true);
+        setErrorMsg(null);
+
+        // Probe auth: se il token è valido, questa call passa.
+        // Se il token è scaduto/invalidato, tipicamente ricevi 401/403 e andiamo a clearAuthToken().
+        await fetchAllUsers();
+
+        if (!alive) return;
+        router.replace("/");
+      } catch (err: any) {
+        // Token presente ma non valido (o sessione non più autorizzata)
+        await clearAuthToken();
+
+        if (!alive) return;
+        // resto su login e lascio inserire le credenziali
+      } finally {
+        if (alive) setLoading(false);
       }
     })();
+
+    return () => {
+      alive = false;
+    };
   }, [router]);
 
   useEffect(() => {
@@ -101,7 +126,7 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    // ✅ FIX: evita doppio submit / double tap / enter+click
+    // ✅ anti doppio submit
     if (loading) return;
 
     setErrorMsg(null);
@@ -242,11 +267,7 @@ export default function LoginScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={showPassword ? "Nascondi password" : "Mostra password"}
                 >
-                  {showPassword ? (
-                      <EyeOff size={20} color={colors.icon} />
-                  ) : (
-                      <Eye size={20} color={colors.icon} />
-                  )}
+                  {showPassword ? <EyeOff size={20} color={colors.icon} /> : <Eye size={20} color={colors.icon} />}
                 </TouchableOpacity>
               </View>
             </View>
@@ -291,9 +312,7 @@ export default function LoginScreen() {
                 ) : (
                     <>
                       <LogIn size={20} color="white" />
-                      <Text className={`font-bold text-lg ml-2 ${colors.buttonText}`}>
-                        Sign In
-                      </Text>
+                      <Text className={`font-bold text-lg ml-2 ${colors.buttonText}`}>Sign In</Text>
                     </>
                 )}
               </View>

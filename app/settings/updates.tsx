@@ -205,7 +205,7 @@ export default function UpdatesCloudScreen() {
             >
                 {/* BACK BUTTON */}
                 <TouchableOpacity
-                    onPress={() => router.push("/settings/sync-agents")}
+                    onPress={() => router.push("/")}
                     style={{
                         padding: 6,
                         borderRadius: 999,
