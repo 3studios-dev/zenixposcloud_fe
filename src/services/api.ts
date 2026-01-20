@@ -1,80 +1,77 @@
+// src/services/api.ts
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 
-const TOKEN_KEY = "auth_token";
+export const TOKEN_KEY = "auth_token";
 
 let MEM_TOKEN: string | null = null;
 
-// anti-loop in caso di 401 ripetuti
+// evita loop se arrivano più 401 in cascata durante redirect
 let IS_REDIRECTING_TO_LOGIN = false;
 
-export function getAuthToken() {
+export function getAuthToken(): string | null {
     return MEM_TOKEN;
 }
 
 export async function setAuthToken(token: string) {
     MEM_TOKEN = token;
-
-    // imposta subito anche sul default axios (più deterministico)
     api.defaults.headers.common.Authorization = `Bearer ${token}`;
-
     await AsyncStorage.setItem(TOKEN_KEY, token);
 }
 
 export async function clearAuthToken() {
     MEM_TOKEN = null;
-
-    // rimuove anche dal default axios
     delete api.defaults.headers.common.Authorization;
-
     await AsyncStorage.removeItem(TOKEN_KEY);
 }
 
 export async function bootstrapAuthToken() {
-    if (!MEM_TOKEN) {
-        const t = await AsyncStorage.getItem(TOKEN_KEY);
-        MEM_TOKEN = t || null;
+    if (MEM_TOKEN) return;
 
-        if (MEM_TOKEN) {
-            api.defaults.headers.common.Authorization = `Bearer ${MEM_TOKEN}`;
-        }
+    const t = await AsyncStorage.getItem(TOKEN_KEY);
+    MEM_TOKEN = t || null;
+
+    if (MEM_TOKEN) {
+        api.defaults.headers.common.Authorization = `Bearer ${MEM_TOKEN}`;
     }
 }
 
-// 🔹 helper per mappare il payload d'errore del backend
-export const extractApiErrorMessage = (error: any): string => {
-    const res = error?.response;
-    const data = res?.data;
+export function extractApiErrorMessage(error: any): string {
+    const data = error?.response?.data;
 
-    // caso tipo:
-    // { code, httpCode, internalMessage, moreInfo, type, userMessage }
     if (data && typeof data === "object") {
-        if (typeof data.userMessage === "string" && data.userMessage.trim().length > 0) {
+        if (typeof data.userMessage === "string" && data.userMessage.trim())
             return data.userMessage;
-        }
-        if (typeof data.message === "string" && data.message.trim().length > 0) {
+        if (typeof data.message === "string" && data.message.trim())
             return data.message;
-        }
-        if (typeof data.internalMessage === "string" && data.internalMessage.trim().length > 0) {
+        if (typeof data.error === "string" && data.error.trim()) return data.error;
+        if (typeof data.internalMessage === "string" && data.internalMessage.trim())
             return data.internalMessage;
-        }
     }
 
-    // errori senza response (timeout, rete, ecc.)
-    if (error?.code === "ECONNABORTED") {
-        return "La richiesta ha superato il tempo massimo, riprova.";
-    }
-    if (error?.message?.includes("Network Error")) {
+    if (error?.code === "ECONNABORTED")
+        return "Timeout della richiesta. Controlla la connessione.";
+    if (error?.message === "Network Error")
         return "Errore di rete. Controlla la connessione.";
-    }
+    return error?.message || "Errore imprevisto.";
+}
 
-    return error?.message || "Si è verificato un errore imprevisto.";
-};
+/* ================== BASE URL (.env) ================== */
+
+const API_BASE_URL =
+    process.env.EXPO_PUBLIC_API_BASE_URL?.trim() ||
+    "https://railway-java-quarkus-production-ce76.up.railway.app"; // fallback sicuro (cambialo se vuoi)
+
+if (!process.env.EXPO_PUBLIC_API_BASE_URL) {
+    console.warn(
+        "⚠️ EXPO_PUBLIC_API_BASE_URL non è definita. Uso fallback:",
+        API_BASE_URL
+    );
+}
 
 const api = axios.create({
-    // NB: gli endpoint devono essere chiamati tipo: /api/v1/app/users/all
-    baseURL: "https://railway-java-quarkus-production-ce76.up.railway.app",
+    baseURL: API_BASE_URL,
     timeout: 15000,
     withCredentials: true,
 });
@@ -85,7 +82,6 @@ async function ensureToken(): Promise<string | null> {
     const t = await AsyncStorage.getItem(TOKEN_KEY);
     MEM_TOKEN = t || null;
 
-    // riallinea anche il default axios se trovato
     if (MEM_TOKEN) {
         api.defaults.headers.common.Authorization = `Bearer ${MEM_TOKEN}`;
     }
@@ -93,7 +89,26 @@ async function ensureToken(): Promise<string | null> {
     return MEM_TOKEN;
 }
 
-// ========= INTERCEPTORS =========
+function getCurrentPathSafe(): string {
+    if (typeof window !== "undefined" && window.location?.pathname) {
+        return window.location.pathname;
+    }
+    return "";
+}
+
+function isLoginRequest(config: any): boolean {
+    const url = String(config?.url || "");
+    // più robusto: evita che 401 del login triggeri redirect/logout
+    return url.includes("/auth/login");
+}
+
+function isOnLoginScreen(): boolean {
+    const path = getCurrentPathSafe();
+    return path.includes("/login");
+}
+
+/* ================== INTERCEPTORS ================== */
+
 api.interceptors.request.use(
     async (config) => {
         const token = await ensureToken();
@@ -101,30 +116,26 @@ api.interceptors.request.use(
         const isFormData =
             typeof FormData !== "undefined" && config.data instanceof FormData;
 
-        // Normalizziamo gli header SENZA rompere le GET
         const method = (config.method || "get").toLowerCase();
 
-        // Partiamo dagli header esistenti
         config.headers = {
             ...(config.headers || {}),
         };
 
-        // Accept di default
         (config.headers as any).Accept = isFormData ? "*/*" : "application/json";
 
-        // ⚠️ Content-Type SOLO se NON è GET e NON è FormData
         if (!isFormData && method !== "get") {
             (config.headers as any)["Content-Type"] = "application/json";
         }
-
-        // Se è FormData, lasciamo gestire axios il boundary → niente Content-Type manuale
         if (isFormData && (config.headers as any)["Content-Type"]) {
             delete (config.headers as any)["Content-Type"];
         }
 
-        // Authorization corretto (case-sensitive per gli standard)
         if (token) {
             (config.headers as any).Authorization = `Bearer ${token}`;
+        } else {
+            if ((config.headers as any).Authorization)
+                delete (config.headers as any).Authorization;
         }
 
         return config;
@@ -135,48 +146,44 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
-        // 🔸 mostra SEMPRE un toast con il messaggio d'errore mappato
         try {
             const msg = extractApiErrorMessage(error);
-            // definito da <FeedbackProvider> / ToastHost
             (globalThis as any).__toast_show__?.(msg, "error", 4500);
-        } catch (e) {
-            console.log("[API_INTERCEPTOR_TOAST_ERROR]", e);
-        }
+        } catch {}
 
         const status = error?.response?.status;
+        const cfg = error?.config;
 
         if (status === 401) {
-            // evita loop se arrivano più 401 in cascata
+            if (isLoginRequest(cfg)) {
+                return Promise.reject(error);
+            }
+
             if (IS_REDIRECTING_TO_LOGIN) {
                 return Promise.reject(error);
             }
 
-            console.warn("🔒 Token scaduto o non valido, eseguo logout...");
             IS_REDIRECTING_TO_LOGIN = true;
 
             try {
                 await clearAuthToken();
 
-                const isWeb = typeof window !== "undefined";
-                const path = isWeb ? window.location.pathname : "";
-
-                // se siamo già su /login (web), non fare replace
-                if (!isWeb || !path.includes("/login")) {
+                if (typeof window !== "undefined") {
+                    if (!isOnLoginScreen()) {
+                        router.replace("/login");
+                    }
+                } else {
                     router.replace("/login");
                 }
             } finally {
-                // reset dopo un breve tick: evita rimbalzi durante la transizione
                 setTimeout(() => {
                     IS_REDIRECTING_TO_LOGIN = false;
                 }, 300);
             }
         }
 
-        // importantissimo: rilancia l'errore così i catch locali continuano a funzionare
         return Promise.reject(error);
     }
 );
 
 export default api;
-export { TOKEN_KEY };
